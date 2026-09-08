@@ -68,63 +68,143 @@ func (l *rbxLesson) MainIDStr() string {
 	return ""
 }
 
-// FetchSchedule 拉课表并转行
+// ToRow 把接口讲次转成数据库行 (schedule/my 与 class/lessons 结构一致)
+func (l *rbxLesson) ToRow() *LessonRow {
+	st, err1 := strconv.ParseInt(l.StartTime, 10, 64)
+	et, err2 := strconv.ParseInt(l.EndTime, 10, 64)
+	if err1 != nil || err2 != nil {
+		return nil
+	}
+	row := &LessonRow{
+		LessonID:       l.LessonID,
+		StartTime:      st,
+		EndTime:        et,
+		ClassroomName:  l.ClassroomName,
+		Teacher:        l.Teacher.TeacherName,
+		ClassID:        fmt.Sprintf("%v", l.ClassID),
+		MainID:         l.MainIDStr(),
+		RoomCode:       l.RoomCode,
+		Record:         l.Record,
+		PlaybackStatus: l.Playback.Status,
+	}
+	if len(l.Playback.URLs) > 0 {
+		row.PlaybackURL = l.Playback.URLs[0]
+		row.AuthExp = authKeyExpire(row.PlaybackURL)
+	}
+	if len(l.Playback.MediaID) > 0 {
+		row.MediaID = l.Playback.MediaID[0]
+	}
+	b, _ := json.Marshal(l)
+	row.Raw = string(b)
+	return row
+}
+
+// FetchSchedule 按时间窗拉课表 (兼容入口, 主同步走 FetchClasses+FetchClassLessons)
 func FetchSchedule(token, uid string, fromSec, toSec int64) ([]*LessonRow, error) {
 	u := fmt.Sprintf("%s/api/schedule/my?userId=%s&queryType=1&startDate=%d&endDate=%d&token=%s",
 		apiBase, url.QueryEscape(uid), fromSec, toSec, url.QueryEscape(token))
-	req, _ := http.NewRequest("GET", u, nil)
-	req.Header.Set("User-Agent", "xdf-api/1.0")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	var r struct {
 		Code int         `json:"code"`
 		Msg  string      `json:"msg"`
 		Data []rbxLesson `json:"data"`
 	}
-	if err := json.Unmarshal(body, &r); err != nil {
+	if err := callXdfAPI(u, &r); err != nil {
 		return nil, err
 	}
 	if r.Code != 0 {
 		return nil, fmt.Errorf("接口返回 code=%d msg=%s", r.Code, r.Msg)
 	}
 	var out []*LessonRow
-	for _, it := range r.Data {
-		st, err1 := strconv.ParseInt(it.StartTime, 10, 64)
-		et, err2 := strconv.ParseInt(it.EndTime, 10, 64)
-		if err1 != nil || err2 != nil {
-			continue
+	for i := range r.Data {
+		if row := r.Data[i].ToRow(); row != nil {
+			out = append(out, row)
 		}
-		row := &LessonRow{
-			LessonID:       it.LessonID,
-			StartTime:      st,
-			EndTime:        et,
-			ClassroomName:  it.ClassroomName,
-			Teacher:        it.Teacher.TeacherName,
-			ClassID:        fmt.Sprintf("%v", it.ClassID),
-			MainID:         it.MainIDStr(),
-			RoomCode:       it.RoomCode,
-			Record:         it.Record,
-			PlaybackStatus: it.Playback.Status,
-		}
-		if len(it.Playback.URLs) > 0 {
-			row.PlaybackURL = it.Playback.URLs[0]
-			row.AuthExp = authKeyExpire(row.PlaybackURL)
-		}
-		if len(it.Playback.MediaID) > 0 {
-			row.MediaID = it.Playback.MediaID[0]
-		}
-		b, _ := json.Marshal(it)
-		row.Raw = string(b)
-		out = append(out, row)
 	}
 	return out, nil
+}
+
+// ---- 全量课程/讲次 (我的课程页数据源) ----
+type rbxClass struct {
+	ClassID     any    `json:"classId"`
+	ClassName   string `json:"className"`
+	ClassCode   string `json:"classCode"`
+	Channel     int    `json:"channel"`
+	StartTime   string `json:"startTime"`
+	EndTime     string `json:"endTime"`
+	ExpiredTime string `json:"expiredTime"`
+	Teacher     struct {
+		TeacherName string `json:"teacherName"`
+	} `json:"teacher"`
+}
+
+func (c *rbxClass) ClassIDStr() string {
+	switch v := c.ClassID.(type) {
+	case string:
+		return v
+	case float64:
+		return fmt.Sprintf("%.0f", v)
+	}
+	return ""
+}
+
+// FetchClasses 返回全部课程 (pageSize 2000, 不分页)
+func FetchClasses(token string) ([]rbxClass, error) {
+	u := fmt.Sprintf("%s/api/schedule/my-classes?pageSize=2000&version=2.74.3.2063&token=%s",
+		apiBase, url.QueryEscape(token))
+	var r struct {
+		Code int `json:"code"`
+		Data struct {
+			List  []rbxClass `json:"list"`
+			Total int        `json:"total"`
+		} `json:"data"`
+	}
+	if err := callXdfAPI(u, &r); err != nil {
+		return nil, err
+	}
+	if r.Code != 200 {
+		return nil, fmt.Errorf("接口返回 code=%d", r.Code)
+	}
+	return r.Data.List, nil
+}
+
+// FetchClassLessons 返回某课程的全部讲次 (含历史与未来, 回放直链每次重新签发)
+func FetchClassLessons(token, classID string) ([]*LessonRow, error) {
+	u := fmt.Sprintf("%s/api/schedule/class/lessons?classId=%s&version=2.74.3.2063&token=%s",
+		apiBase, url.QueryEscape(classID), url.QueryEscape(token))
+	var r struct {
+		Code int `json:"code"`
+		Data struct {
+			List []rbxLesson `json:"list"`
+		} `json:"data"`
+	}
+	if err := callXdfAPI(u, &r); err != nil {
+		return nil, err
+	}
+	if r.Code != 200 {
+		return nil, fmt.Errorf("接口返回 code=%d", r.Code)
+	}
+	var out []*LessonRow
+	for i := range r.Data.List {
+		if row := r.Data.List[i].ToRow(); row != nil {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func callXdfAPI(u string, out any) error {
+	req, _ := http.NewRequest("GET", u, nil)
+	req.Header.Set("User-Agent", "xdf-api/1.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	return json.Unmarshal(body, out)
 }
 
 // authKeyExpire 从 auth_key=exp-rand-uid-sig 中取过期时间
@@ -140,7 +220,7 @@ func authKeyExpire(uri string) int64 {
 	return 0
 }
 
-// ---- 同步 ----
+// ---- 同步 (全量: 我的课程 -> 每班全部讲次) ----
 func (a *App) Sync() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -158,23 +238,29 @@ func (a *App) Sync() {
 		a.db.SetSetting("last_sync_err", "token 已过期, 请到设置页更新")
 		return
 	}
-	now := time.Now()
-	// 过去窗口取 90 天(回放直链会随每次查询重新签发, 老课回放仍可看); 未来 30 天足够排课
-	rows, err := FetchSchedule(token, info.Sub, now.AddDate(0, -3, 0).Unix(), now.AddDate(0, 0, 30).Unix())
+	classes, err := FetchClasses(token)
 	if err != nil {
-		a.db.SetSetting("last_sync_err", err.Error())
+		a.db.SetSetting("last_sync_err", "my-classes: "+err.Error())
 		log.Println("[sync] ", err)
 		return
 	}
-	n := 0
-	for _, r := range rows {
-		if err := a.db.UpsertLesson(r); err == nil {
-			n++
+	total, ok := 0, 0
+	for _, c := range classes {
+		rows, err := FetchClassLessons(token, c.ClassIDStr())
+		if err != nil {
+			log.Println("[sync] class/lessons", c.ClassIDStr(), err)
+			continue
+		}
+		ok++
+		for _, r := range rows {
+			if err := a.db.UpsertLesson(r); err == nil {
+				total++
+			}
 		}
 	}
 	a.db.SetSetting("last_sync", fmt.Sprintf("%d", time.Now().Unix()))
 	a.db.SetSetting("last_sync_err", "")
-	log.Printf("[sync] 完成: %d 节课 (共 %d 条记录)", n, len(rows))
+	log.Printf("[sync] 全量同步完成: %d/%d 个课程, %d 条讲次记录", ok, len(classes), total)
 }
 
 // ---- 上课提醒 ----
