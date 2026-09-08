@@ -159,7 +159,8 @@ func (a *App) Sync() {
 		return
 	}
 	now := time.Now()
-	rows, err := FetchSchedule(token, info.Sub, now.AddDate(0, 0, -30).Unix(), now.AddDate(0, 0, 30).Unix())
+	// 过去窗口取 90 天(回放直链会随每次查询重新签发, 老课回放仍可看); 未来 30 天足够排课
+	rows, err := FetchSchedule(token, info.Sub, now.AddDate(0, -3, 0).Unix(), now.AddDate(0, 0, 30).Unix())
 	if err != nil {
 		a.db.SetSetting("last_sync_err", err.Error())
 		log.Println("[sync] ", err)
