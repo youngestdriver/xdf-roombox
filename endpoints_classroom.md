@@ -1,7 +1,7 @@
 # 课上接口清单（课堂/白板 Web 应用 + 实时快照）
 
 - 抓取时间: 2026-09-07 19:43:31
-- 课堂: teacherClassId=623589057 cid=623589060 (27考研专业课一对一, uid=25527722)
+- 课堂: teacherClassId=<CLASS_ID> cid=<ROOM_ID> ([专业课一对一课程], uid=<UID>)
 - 来源:
   - 课堂页实时 XHR 快照（直播 Web 应用: assets.coursebox.xdf.cn/wb/<hash>/）
   - bundle 提取: js_wb/(白板主应用), js_wbtools/(点名/抢答/签到等互动工具), js_sdk/(wbSdk, im.sdk)
@@ -10,8 +10,8 @@
 ## 一、实时 XHR 快照（课上实际请求, token 已打码）
 https://api.roombox.xdf.cn/api/client/h5/config/pandora/boards
 https://api.roombox.xdf.cn/api/client/h5/config/pandora/boards?_mode=dev
-https://api.roombox.xdf.cn/api/emoji/list?cid=623589060&uid=25527722&_mode=dev
-https://api.roombox.xdf.cn/api/matrix/client/classroom/sign-in/student/info?cid=623589057&classroomId=623589057&_mode=dev
+https://api.roombox.xdf.cn/api/emoji/list?cid=<ROOM_ID>&uid=<UID>&_mode=dev
+https://api.roombox.xdf.cn/api/matrix/client/classroom/sign-in/student/info?cid=<CLASS_ID>&classroomId=<CLASS_ID>&_mode=dev
 https://api.roombox.xdf.cn/quiz/api/v1/quiz/latest/unSubmit?_mode=dev
 https://api.roombox.xdf.cn/quiz/api/vote/user/info?_mode=dev
 https://highschool-exercise.roombox.xdf.cn/_sys_/connectivity

@@ -1,9 +1,9 @@
 {
   "captured_at": "2026-09-07 19:43:31",
   "class_context": {
-    "teacherClassId": "623589057",
-    "cid": "623589060",
-    "uid": "25527722",
+    "teacherClassId": "<CLASS_ID>",
+    "cid": "<ROOM_ID>",
+    "uid": "<UID>",
     "cType": 4,
     "identity": 3
   },
@@ -13,7 +13,7 @@
     "https://highschool-exercise.roombox.xdf.cn/_sys_/connectivity",
     "https://api.roombox.xdf.cn/quiz/api/v1/quiz/latest/unSubmit?_mode=dev",
     "https://api.roombox.xdf.cn/quiz/api/vote/user/info?_mode=dev",
-    "https://api.roombox.xdf.cn/api/emoji/list?cid=623589060&uid=25527722&_mode=dev",
+    "https://api.roombox.xdf.cn/api/emoji/list?cid=<ROOM_ID>&uid=<UID>&_mode=dev",
     "https://api.roombox.xdf.cn/api/client/h5/config/pandora/boards?_mode=dev",
     "https://webapps.roombox.xdf.cn/wbtools/asset-manifest.json?t=1788780932020",
     "https://webapps.roombox.xdf.cn/wbtools/index.html?t=1788780932022",
@@ -29,7 +29,7 @@
     "https://webapps.roombox.xdf.cn/wbtools/static/css/691.c5859543.chunk.css",
     "https://webapps.roombox.xdf.cn/wbtools/static/js/691.acd6bd0d.chunk.js",
     "https://webapps.roombox.xdf.cn/wbtools/static/css/main.ae22add9.css",
-    "https://api.roombox.xdf.cn/api/matrix/client/classroom/sign-in/student/info?cid=623589057&classroomId=623589057&_mode=dev",
+    "https://api.roombox.xdf.cn/api/matrix/client/classroom/sign-in/student/info?cid=<CLASS_ID>&classroomId=<CLASS_ID>&_mode=dev",
     "https://webapps.roombox.xdf.cn/wbtools/static/js/main.f6141dbe.js",
     "https://webapps.roombox.xdf.cn/wbtools/static/js/591.f6c7a70b.chunk.js",
     "https://webapps.roombox.xdf.cn/wbtools/static/css/97.4a05a7f7.chunk.css",

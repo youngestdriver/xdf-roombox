@@ -155,7 +155,7 @@ https://webapps.roombox.xdf.cn/_sys_/connactifitf
 - 窗口: `https://d.roombox.xdf.cn/comment/?classroomId={cid}&...&commit=sid(2000),...,mac(MAC地址),userid(uid),...,timestamp(ts)&userRole=3&token={jwt}`（jQuery 老式页面, 源码存于 comment_page.html）
 - **提交接口: `POST https://api.roombox.xdf.cn/api/comment/add?token={jwt}`**（JSON body, 新接口需用）
 - 请求体:
-  - `classroomId`: "623589057"
+  - `classroomId`: "<CLASS_ID>"
   - `userinfo`: commit 参数解码原样（含 sid/lang/source/os/**mac**/userid/role/classid/timestamp —— 注意含本机 MAC, 勿外传该 URL）
   - `commentAspects`: 学生版 `{1: 3, 2: 3, 3: 3}`（key: 1=老师视频声音, 2=同学视频声音, 3=上课客户端; value: 3=流畅清楚/2=偶尔卡顿/1=非常卡顿）
   - `commentText`: 建议文本(≤1000字), 可空

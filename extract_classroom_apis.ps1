@@ -79,7 +79,7 @@ Log ("提取: 路径=" + $apiPaths.Count + " 域名=" + $domains.Count + " ws=" 
 # ---- 5) 落盘 ----
 $raw = [ordered]@{
   captured_at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-  class_context = [ordered]@{ teacherClassId = '623589057'; cid = '623589060'; uid = '25527722'; cType = 4; identity = 3 }
+  class_context = [ordered]@{ teacherClassId = '<CLASS_ID>'; cid = '<ROOM_ID>'; uid = '<UID>'; cType = 4; identity = 3 }
   live_xhr = @($snap.xhr | ForEach-Object { Redact $_ })
   bundle_scripts = $snap.scripts
   ws_url_templates = @($wsUrls | Sort-Object)
@@ -93,7 +93,7 @@ $md = @"
 # 课上接口清单（课堂/白板 Web 应用 + 实时快照）
 
 - 抓取时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-- 课堂: teacherClassId=623589057 cid=623589060 (27考研专业课一对一, uid=25527722)
+- 课堂: teacherClassId=<CLASS_ID> cid=<ROOM_ID> ([专业课一对一课程], uid=<UID>)
 - 来源:
   - 课堂页实时 XHR 快照（直播 Web 应用: assets.coursebox.xdf.cn/wb/<hash>/）
   - bundle 提取: js_wb/(白板主应用), js_wbtools/(点名/抢答/签到等互动工具), js_sdk/(wbSdk, im.sdk)

@@ -31,7 +31,7 @@ API 用 JWT（HS512，`sub`=用户ID），通过 URL 查询参数 `token=` 传�
 
 ```powershell
 $token = '<JWT>'  # 见上
-$uid = '25527722'
+$uid = '<UID>'
 $start = ([DateTimeOffset]::Parse('2026-09-08T00:00:00+08:00')).ToUnixTimeSeconds()
 $end   = ([DateTimeOffset]::Parse('2026-09-15T00:00:00+08:00')).ToUnixTimeSeconds()
 Invoke-RestMethod "https://api.roombox.xdf.cn/api/schedule/my?userId=$uid&queryType=1&startDate=$start&endDate=$end&token=$token"
@@ -58,5 +58,5 @@ schtasks /create /tn "xdf-auto-enter" /tr "pwsh -NoProfile -File C:\Users\PaperC
 ## 盲区
 
 - 桌面主窗体 UI（localhtml / webapps.roombox.xdf.cn）的前端 bundle 在 CEF 缓存与 resources.pak 中，
-  本清单尚未覆盖 —— 需要时可用 `RoomboxData\Cache\25527722\` 下的 CEF 缓存或直接抓包补齐。
+  本清单尚未覆盖 —— 需要时可用 `RoomboxData\Cache\<UID>\` 下的 CEF 缓存或直接抓包补齐。
 - 课上信令 `im.roombox.xdf.cn/polaris/v1/tcp_*` 是私有二进制协议，需 CDP Network 监听或 mitmproxy 还原。

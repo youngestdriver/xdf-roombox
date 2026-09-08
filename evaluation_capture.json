@@ -3,7 +3,7 @@
     "captured_at": "2026-09-07 20:32:28",
     "target_id": "3745FDF32074695F3F09875F48BFDF68",
     "title": "课后评价",
-    "url": "https://d.roombox.xdf.cn/comment/?classroomId=623589057&language=cn&theme=roombox&commit=sid(2000),lang(cn),source(pc),os(Windows%2010%20Version%202009),veriosn(2.74.3.2063),mac(<MAC>),userid(<UID>),role(3),classid(623589060),timestamp(1788784253)&userRole=3&token=<JWT>",
+    "url": "https://d.roombox.xdf.cn/comment/?classroomId=<CLASS_ID>&language=cn&theme=roombox&commit=sid(2000),lang(cn),source(pc),os(Windows%2010%20Version%202009),veriosn(2.74.3.2063),mac(<MAC>),userid(<UID>),role(3),classid(<ROOM_ID>),timestamp(1788784253)&userRole=3&token=<JWT>",
     "body": "老师的视频和声音\n流畅清楚\n偶尔卡顿\n非常卡顿\n其他同学的视频和声音\n流畅清楚\n偶尔卡顿\n非常卡顿\n上课客户端\n稳定无问题\n偶尔崩溃\n无法上课\n其他意见或建议\n取消提交",
     "xhr": null,
     "scripts": [
@@ -19,7 +19,7 @@
     "target_id": "09675FF65B50652230084E6323803E81",
     "title": "schedule",
     "url": "https://d.roombox.xdf.cn/schedule/?token=<JWT>&userId=<UID>&servertime=1788779297&language=cn&theme=roomboxlight&version=2.74.3.2063&role=3",
-    "body": "2026年10月\n今天\n日\n一\n二\n三\n四\n五\n六\n27\n\n1\n\n28\n\n1\n\n29\n30\n\n1\n\n1\n2\n3\n4\n5\n6\n\n2\n\n7\n\n2节\n\n8\n9\n10\n11\n\n2\n\n12\n13\n14\n15\n16\n17\n\n2\n\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n时区：(UTC+08:00) 北京，重庆，香港特别行政区，乌鲁木齐\n全部(2)\n未完成(2)\n已完成(0)\n直播课\n08:30\n/\n10:30\n27考研数学无忧B计划（冲点阶段）第20讲\n未开始\n\n主讲\n\n王广广\n\n辅师\n\n徐坤\n\n进入教室\n直播课\n10:40\n/\n12:40\n27考研数学无忧B计划（冲点阶段）第21讲\n未开始\n\n主讲\n\n王广广\n\n辅师\n\n徐坤\n\n进入教室",
+    "body": "2026年10月\n今天\n日\n一\n二\n三\n四\n五\n六\n27\n\n1\n\n28\n\n1\n\n29\n30\n\n1\n\n1\n2\n3\n4\n5\n6\n\n2\n\n7\n\n2节\n\n8\n9\n10\n11\n\n2\n\n12\n13\n14\n15\n16\n17\n\n2\n\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n时区：(UTC+08:00) 北京，重庆，香港特别行政区，乌鲁木齐\n全部(2)\n未完成(2)\n已完成(0)\n直播课\n08:30\n/\n10:30\n[考研课程]第20讲\n未开始\n\n主讲\n\n[讲师]\n\n辅师\n\n[讲师]\n\n进入教室\n直播课\n10:40\n/\n12:40\n[考研课程]第21讲\n未开始\n\n主讲\n\n[讲师]\n\n辅师\n\n[讲师]\n\n进入教室",
     "xhr": [
       "https://api.roombox.xdf.cn/api/client/h5/config/pandora/boards",
       "https://api.roombox.xdf.cn/api/ad/get?terminal=Windows&token=<JWT>",
@@ -67,7 +67,7 @@
       "https://api.roombox.xdf.cn/api/schedule/myCalendar?userId=<UID>&startDate=1789574400&endDate=1794671999&token=<JWT>"
     ],
     "scripts": [
-      "https://1379098.s4.udesk.cn/spa1/im_web_plugins/74724/out_config?company_code=173kjd3e&language=&session_key=&nonce=cdadac418bb53&timestamp=1788779297888&web_token=25527722&signature=A4907F6433D1352BCF4E0CE8128F0762779CCECA&_log_group_id=29806&callback=udesk_jsonp0",
+      "https://1379098.s4.udesk.cn/spa1/im_web_plugins/74724/out_config?company_code=173kjd3e&language=&session_key=&nonce=cdadac418bb53&timestamp=1788779297888&web_token=<UID>&signature=A4907F6433D1352BCF4E0CE8128F0762779CCECA&_log_group_id=29806&callback=udesk_jsonp0",
       "https://basevistor.s4.udesk.cn/customerApi/key?_=&is_invite=1&key=7b2ef04e-802e-4bce-b5c9-bad5f6a1e2e5&code=173kjd3e&url=https%3A%2F%2Fd.roombox.xdf.cn%2Fschedule%2F%3Ftoken%3D%3CJWT%3E&referrer=&keyword=&title=schedule&scaleScreen=1707*960&callback=udesk_jsonp1",
       "https://assets-cli.s4.udesk.cn/im_client/js/udeskApi.js",
       "https://d.roombox.xdf.cn/schedule/static/js/vendors-react.462bab7a.chunk.js",

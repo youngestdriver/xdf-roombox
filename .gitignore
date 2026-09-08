@@ -2,3 +2,5 @@
 *.log
 server/testdata/
 .DS_Store
+auto_enter_state.json
+schedule_week.json

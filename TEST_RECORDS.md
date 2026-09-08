@@ -5,7 +5,7 @@
 **环境**
 - 应用: 新东方云教室 Roombox 2.74.3.2063（Qt + CEF），以 `--remote-debugging-port=9222` 运行
 - 脚本: `auto_enter.ps1`（`-CheckNow` 单次模式，非 DryRun）
-- 目标课程: lesson `762706268398689` 「27考研专业课一对一150（30小时）」 2026-09-07 19:30 直播课（主讲: 顾存存）
+- 目标课程: lesson `<LESSON_ID>` 「[专业课一对一课程]」 2026-09-07 19:30 直播课（主讲: [讲师]）
 
 **时间线**
 - `19:35:22` 脚本判定临课（开课后 5 分 23 秒，处于 `[now-10min, now+5min]` 宽限窗），在课表页定位到匹配「课程名 + 19:30」的 `button.enter`，执行点击（日志: `CLICKED@19:30 enter`）
@@ -74,7 +74,7 @@ pwsh -File auto_enter.ps1 -Loop               # 常驻
 
 - **技术栈**: Go 单二进制（net/http + robfig/cron + modernc/sqlite 纯 Go 无 cgo）+ FullCalendar v6 内嵌前端, Docker 多阶段构建（alpine, ~20MB 镜像）
 - **功能**: 课表日历(月/周)、回放列表(生成状态/签名过期检测)、在线观看(302)/下载(流式代理+Range+Content-Disposition)、上课提醒(钉钉/企微/飞书/通用 webhook, 每课一次)、token 手动填写(设置页, 到期检测)
-- **本机端到端验证**: 本地编译 OK(16MB exe) → 起服务 → Basic Auth 401/200 → 保存 token 触发同步 → **同步 86 节课/51 回放** → 日历 events 正常 → 回放代理 Range 请求返回 **206 + 1024B + video/mp4**, HEAD 200 + `Content-Disposition: attachment; filename="20260907_1930_623589057.mp4"` → 回放列表无未来课
+- **本机端到端验证**: 本地编译 OK(16MB exe) → 起服务 → Basic Auth 401/200 → 保存 token 触发同步 → **同步 86 节课/51 回放** → 日历 events 正常 → 回放代理 Range 请求返回 **206 + 1024B + video/mp4**, HEAD 200 + `Content-Disposition: attachment; filename="20260907_1930_<CLASS_ID>.mp4"` → 回放列表无未来课
 - **部署**: 服务器 `cd server && docker compose up -d --build`（ADMIN_PASS 必填）
 
 ## 2026-09-07 20:39 — 课后评价自动提交（✅ 成功）
