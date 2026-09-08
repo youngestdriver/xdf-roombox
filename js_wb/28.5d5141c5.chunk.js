@@ -1,0 +1,1 @@
+(this["webpackJsonpwhite-board"]=this["webpackJsonpwhite-board"]||[]).push([[28],{1242:function(t,n,e){},1292:function(t,n,e){"use strict";e.r(n),e.d(n,"default",(function(){return r}));var i=e(0),o=e.n(i),r=(e(1242),function Test(t){var n=t.show,e=void 0!==n&&n;return o.a.createElement("div",{style:{display:e?"block":"none"}})})}}]);

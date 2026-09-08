@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新东方云教室 · 配套服务</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header>
+    <div class="brand">新东方云教室 <span class="sub">配套服务</span></div>
+    <nav>
+      <button class="tab active" data-tab="calendar">日历</button>
+      <button class="tab" data-tab="playbacks">回放</button>
+      <button class="tab" data-tab="settings">设置</button>
+    </nav>
+    <div id="statusbar" class="statusbar"></div>
+  </header>
+
+  <main>
+    <section id="tab-calendar" class="tabpane active">
+      <div id="calendar"></div>
+    </section>
+
+    <section id="tab-playbacks" class="tabpane">
+      <div class="toolbar">
+        <h2>课程回放</h2>
+        <button class="btn sm" onclick="loadPlaybacks()">刷新</button>
+        <span class="hint" id="pb-hint"></span>
+      </div>
+      <table class="table" id="pb-table">
+        <thead><tr>
+          <th>日期</th><th>时间</th><th>课程</th><th>主讲</th><th>状态</th><th>操作</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="tab-settings" class="tabpane">
+      <div class="panel">
+        <h2>接口凭证</h2>
+        <label>云教室 Token（JWT，有效期约14天）
+          <input type="password" id="s-token" placeholder="粘贴课表页 URL 里的 token= 参数" autocomplete="off">
+        </label>
+        <div class="row">
+          <button class="btn" onclick="saveSettings()">保存并同步</button>
+          <span class="hint" id="s-token-hint"></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>上课提醒（Webhook）</h2>
+        <div class="row">
+          <select id="s-wtype">
+            <option value="dingtalk">钉钉/企业微信机器人</option>
+            <option value="wecom">企业微信（文本）</option>
+            <option value="feishu">飞书机器人</option>
+            <option value="generic">通用（JSON {title,content}）</option>
+          </select>
+          <input type="text" id="s-whook" placeholder="Webhook 地址">
+          <input type="number" id="s-nmin" value="5" min="1" max="60" style="width:90px" title="提前多少分钟提醒">
+        </div>
+        <div class="row">
+          <button class="btn" onclick="saveSettings()">保存</button>
+          <button class="btn" onclick="testNotify()">发送测试通知</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>数据同步</h2>
+        <div class="row">
+          <button class="btn" onclick="doSync()">立即同步课表/回放</button>
+          <span class="hint">定时任务: 每15分钟自动同步 · 每分钟检查上课提醒</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal-mask" style="display:none">
+    <div class="modal">
+      <div class="modal-head"><span id="m-title"></span><button class="close" onclick="closeModal()">×</button></div>
+      <div class="modal-body" id="m-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/fullcalendar/index.global.min.js"></script>
+  <script src="/static/fullcalendar/zh-cn.global.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
