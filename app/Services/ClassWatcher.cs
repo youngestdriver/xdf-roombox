@@ -128,16 +128,19 @@ public class ClassWatcher
                         if (!_exited.Contains(justEnded.LessonId))
                         {
                             _log("INFO", $"下课 {over / 60.0:F1} 分钟，退出课堂: {justEnded.ClassroomName}");
-                            if (await _cdp.CloseTargetAsync(classroom.Id))
+                            var closed = await QtDialogCloser.CloseClassroomAsync(_cdp, classroom.Id, _log);
+                            if (closed)
                             {
                                 _exited.Add(justEnded.LessonId);
                                 State.LastAction = "已退出课堂";
+                                _log("INFO", "  课堂已退出");
                                 SaveState();
                             }
+                            else _log("WARN", "  退出未完成，下轮重试");
                         }
                         else if (classroom != null)
                         {
-                            await _cdp.CloseTargetAsync(classroom.Id); // 幂等重关
+                            await QtDialogCloser.CloseClassroomAsync(_cdp, classroom.Id, _log); // 幂等重关
                         }
                     }
                     else
