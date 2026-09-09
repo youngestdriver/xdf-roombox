@@ -173,7 +173,7 @@ function Invoke-Check {
   $hhmm = $lstart.ToString('HH:mm')
   $clickFn = 'hit.click();return "CLICKED@"+hm+" "+hit.className'
   if ($DryRun) { $clickFn = 'return "WOULD-CLICK@"+hm+" "+hit.className' }
-  $expr = "(()=>{const name=$nameJson,hm='$hhmm';const bs=[...document.querySelectorAll('button')].filter(b=>(b.textContent||'').includes('进入教室'));if(!bs.length)return 'NOBUTTON(no button yet)';let hit=bs.find(b=>{const el=b.closest('li,[class*=card],section');return el&&(el.innerText||'').includes(hm)&&(el.innerText||'').includes(name)});if(!hit&&bs.length===1)hit=bs[0];if(!hit)return 'AMBIG buttons='+bs.length;$clickFn})()"
+  $expr = "(()=>{const name=$nameJson,hm='$hhmm';const all=[...document.querySelectorAll('button')].filter(b=>(b.textContent||'').includes('进入教室'));const bs=all.filter(b=>!((b.className||'').toString().includes('disabled')));if(!bs.length)return 'NOBUTTON all='+all.length;let hit=null;if(bs.length===1){hit=bs[0];}else{hit=bs.find(b=>{let el=b;for(let i=0;i<6&&el;i++){el=el.parentElement;if(el&&(el.innerText||'').includes(hm)&&(el.innerText||'').includes(name))return true;}return false;});}if(!hit)return 'AMBIG candidates='+bs.length+' all='+all.length;$clickFn})()"
   $beforeIds = @($targets | ForEach-Object { "$($_.id)|$($_.url)" })
   $result = Invoke-PageJs $sched.webSocketDebuggerUrl $expr
   Log ("点击结果: " + $result)

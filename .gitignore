@@ -4,3 +4,6 @@ server/testdata/
 .DS_Store
 auto_enter_state.json
 schedule_week.json
+bin/
+obj/
+screenshot.png
