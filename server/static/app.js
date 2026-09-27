@@ -22,10 +22,19 @@ document.querySelectorAll('.tab').forEach((btn) => {
     document.querySelectorAll('.tabpane').forEach((p) => p.classList.remove('active'));
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'calendar' && cal) cal.render();
+    if (btn.dataset.tab === 'classes') loadClasses();
     if (btn.dataset.tab === 'playbacks') loadPlaybacks();
     if (btn.dataset.tab === 'settings') loadStatus();
   });
 });
+
+/* ---------- 下载链接(代理/直连) ---------- */
+function dlLink(lessonId, label) {
+  const direct = document.getElementById('pb-direct')?.checked;
+  const href = `/api/playback/${lessonId}/dl` + (direct ? '?mode=direct' : '');
+  const title = direct ? 'CDN 直连下载(不占服务器流量)' : '服务器代理下载(文件名规范, 支持断点续传)';
+  return `<a class="btn sm" href="${href}" title="${title}">${label}</a>`;
+}
 
 /* ---------- 状态栏 ---------- */
 async function loadStatus() {
@@ -95,11 +104,65 @@ async function checkPlaybackInModal(lessonId) {
       el.textContent = '签名已过期, 等待自动刷新';
     } else {
       el.innerHTML = `<a class="btn sm" target="_blank" href="/api/playback/${lessonId}/media">在线观看</a>
-        <a class="btn sm" href="/api/playback/${lessonId}/dl">下载</a>`;
+        ${dlLink(lessonId, '下载')}`;
     }
   } else {
     el.textContent = it && it.status === 0 ? '正在生成中, 稍后自动更新' : '暂无';
   }
+}
+
+/* ---------- 课程(按班级分类) ---------- */
+let classCache = [];
+let activeClassId = null;
+
+async function loadClasses() {
+  const list = await api('/api/classes');
+  classCache = list;
+  const aside = document.getElementById('class-list');
+  const stText = { active: '已开课', ended: '已结课', upcoming: '未开课' };
+  aside.innerHTML = list.map((c) => `
+    <div class="class-item${c.class_id === activeClassId ? ' active' : ''}" data-cid="${c.class_id}">
+      <div class="ci-head">
+        <span class="ci-name">${c.name || '未命名课程'}</span>
+        <span class="badge ${c.status === 'active' ? 'ok' : 'idle'}">${stText[c.status] || ''}</span>
+      </div>
+      <div class="ci-sub">${fmtDate(c.first_lesson, false)} ~ ${fmtDate(c.last_lesson, false)}</div>
+      <div class="ci-sub">班级编码: ${c.code || '-'} · 共 ${c.lesson_count} 讲 · 回放 ${c.playback_count}</div>
+      ${c.teacher ? `<div class="ci-sub">主讲: ${c.teacher}</div>` : ''}
+    </div>`).join('') || '<div class="hint" style="padding:12px">暂无课程数据，请先在设置页配置 token 并同步</div>';
+  aside.querySelectorAll('.class-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      activeClassId = el.dataset.cid;
+      aside.querySelectorAll('.class-item').forEach((x) => x.classList.toggle('active', x === el));
+      loadClassLessons(activeClassId);
+    });
+  });
+  if (activeClassId && !list.some((c) => c.class_id === activeClassId)) activeClassId = null;
+  if (activeClassId) loadClassLessons(activeClassId);
+}
+
+async function loadClassLessons(classId) {
+  const c = classCache.find((x) => x.class_id === classId);
+  document.getElementById('class-title').textContent = c ? c.name : classId;
+  document.getElementById('class-hint').textContent = c ? `共 ${c.lesson_count} 讲 · 回放 ${c.playback_count} 讲` : '';
+  const lessons = await api(`/api/classes/${classId}/lessons`);
+  const tbody = document.querySelector('#class-table tbody');
+  tbody.innerHTML = lessons.map((x) => {
+    let st = '<span class="badge idle">未生成</span>';
+    if (x.status === 1 && x.has_url) st = x.expired ? '<span class="badge warn">已过期</span>' : '<span class="badge ok">可观看</span>';
+    else if (x.status === 0) st = '<span class="badge idle">生成中</span>';
+    let op = '<span class="hint">-</span>';
+    if (x.status === 1 && x.has_url && !x.expired) {
+      op = `<a class="btn sm" target="_blank" href="/api/playback/${x.lesson_id}/media">观看</a>${dlLink(x.lesson_id, '下载')}`;
+    }
+    if (x.report_url) op += `<a class="btn sm" target="_blank" href="${x.report_url}" title="学习报告">报告</a>`;
+    return `<tr>
+      <td>${fmtDate(x.start, false)}</td>
+      <td>${fmtDate(x.start).slice(11)} - ${fmtDate(x.end).slice(11)}</td>
+      <td>${x.title}</td>
+      <td>${x.teacher || '-'}</td>
+      <td>${st}</td><td>${op}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="hint">该课程暂无讲次记录</td></tr>';
 }
 
 /* ---------- 回放 ---------- */
@@ -113,8 +176,7 @@ async function loadPlaybacks() {
     if (x.status === 1 && x.has_url) st = x.expired ? '<span class="badge warn">已过期</span>' : '<span class="badge ok">可观看</span>';
     let op = '<span class="hint">-</span>';
     if (x.status === 1 && x.has_url && !x.expired) {
-      op = `<a class="btn sm" target="_blank" href="/api/playback/${x.lesson_id}/media">观看</a>
-            <a class="btn sm" href="/api/playback/${x.lesson_id}/dl">下载</a>`;
+      op = `<a class="btn sm" target="_blank" href="/api/playback/${x.lesson_id}/media">观看</a>${dlLink(x.lesson_id, '下载')}`;
     } else if (x.status === 0) {
       op = '<span class="hint">生成中…</span>';
     } else if (x.expired) {
@@ -122,7 +184,7 @@ async function loadPlaybacks() {
     }
     return `<tr>
       <td>${fmtDate(x.start, false)}</td>
-      <td>${fmtDate(x.start).slice(11)} - ${fmtDate(x.start + (x.start_end || 0)).slice(11)}</td>
+      <td>${fmtDate(x.start).slice(11)} - ${fmtDate(x.end).slice(11)}</td>
       <td>${x.title}</td>
       <td>${x.teacher ? x.teacher : '-'}</td>
       <td>${st}</td><td>${op}</td></tr>`;

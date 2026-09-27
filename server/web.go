@@ -69,10 +69,14 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 		a.apiLessons(w, r)
 	case r.Method == "GET" && p == "/playbacks":
 		a.apiPlaybacks(w)
+	case r.Method == "GET" && p == "/classes":
+		a.apiClasses(w)
+	case r.Method == "GET" && len(seg) == 3 && seg[0] == "classes" && seg[2] == "lessons":
+		a.apiClassLessons(w, seg[1])
 	case (r.Method == "GET" || r.Method == "HEAD") && len(seg) == 3 && seg[0] == "playback" && seg[2] == "media":
 		a.apiPlaybackRedirect(w, r, seg[1])
 	case (r.Method == "GET" || r.Method == "HEAD") && len(seg) == 3 && seg[0] == "playback" && seg[2] == "dl":
-		a.apiPlaybackProxy(w, r, seg[1])
+		a.apiPlaybackDownload(w, r, seg[1])
 	case r.Method == "POST" && p == "/notify/test":
 		a.apiNotifyTest(w)
 	default:
@@ -216,8 +220,8 @@ func (a *App) apiPlaybackRedirect(w http.ResponseWriter, r *http.Request, id str
 	http.Redirect(w, r, l.PlaybackURL, http.StatusFound)
 }
 
-// apiPlaybackProxy 流式代理下载 (支持 Range/断点)
-func (a *App) apiPlaybackProxy(w http.ResponseWriter, r *http.Request, id string) {
+// apiPlaybackDownload 下载回放. ?mode=direct 302 跳转 CDN 直连; 默认 mode=proxy 服务器中转(文件名规范/支持断点)
+func (a *App) apiPlaybackDownload(w http.ResponseWriter, r *http.Request, id string) {
 	l, err := a.db.GetLesson(id)
 	if err != nil || l.PlaybackURL == "" {
 		http.Error(w, "回放不存在或未生成", 404)
@@ -227,6 +231,15 @@ func (a *App) apiPlaybackProxy(w http.ResponseWriter, r *http.Request, id string
 		http.Error(w, "回放签名已过期, 等待同步刷新后重试", 410)
 		return
 	}
+	if r.URL.Query().Get("mode") == "direct" {
+		http.Redirect(w, r, l.PlaybackURL, http.StatusFound)
+		return
+	}
+	a.apiPlaybackProxy(w, r, l)
+}
+
+// apiPlaybackProxy 流式代理下载 (支持 Range/断点)
+func (a *App) apiPlaybackProxy(w http.ResponseWriter, r *http.Request, l *LessonRow) {
 	req, err := http.NewRequest("GET", l.PlaybackURL, nil)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -257,6 +270,69 @@ func (a *App) apiPlaybackProxy(w http.ResponseWriter, r *http.Request, id string
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Println("[proxy] 传输中断: ", err)
 	}
+}
+
+// ---- 课程分类视图 ----
+// apiClasses 按班级聚合的课程列表 (含历史班级)
+func (a *App) apiClasses(w http.ResponseWriter) {
+	rows, err := a.db.ListClasses()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"err": err.Error()})
+		return
+	}
+	now := time.Now().Unix()
+	out := []map[string]any{}
+	for _, c := range rows {
+		name := c.Name
+		if name == "" { // 无权威名: 从首个讲次名推导
+			name = deriveClassName(c.FirstLesson)
+		}
+		status := "active" // 已开课
+		if c.LastTime < now {
+			status = "ended" // 已结课
+		} else if c.FirstTime > now {
+			status = "upcoming"
+		}
+		out = append(out, map[string]any{
+			"class_id":       c.ClassID,
+			"name":           name,
+			"code":           c.Code,
+			"teacher":        c.Teacher,
+			"lesson_count":   c.LessonCount,
+			"playback_count": c.PlaybackCount,
+			"first_lesson":   c.FirstTime,
+			"last_lesson":    c.LastTime,
+			"status":         status,
+		})
+	}
+	writeJSON(w, 200, out)
+}
+
+// apiClassLessons 某班级的全部讲次 (按时间正序)
+func (a *App) apiClassLessons(w http.ResponseWriter, classID string) {
+	rows, err := a.db.ListClassLessons(classID)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"err": err.Error()})
+		return
+	}
+	now := time.Now().Unix()
+	out := []map[string]any{}
+	for _, l := range rows {
+		expired := l.AuthExp > 0 && now > l.AuthExp
+		out = append(out, map[string]any{
+			"lesson_id":   l.LessonID,
+			"start":       l.StartTime,
+			"end":         l.EndTime,
+			"title":       l.ClassroomName,
+			"teacher":     l.Teacher,
+			"status":      l.PlaybackStatus,
+			"has_url":     l.PlaybackURL != "",
+			"expired":     expired,
+			"media_id":    l.MediaID,
+			"report_url":  l.ReportURL,
+		})
+	}
+	writeJSON(w, 200, out)
 }
 
 func (a *App) apiNotifyTest(w http.ResponseWriter) {

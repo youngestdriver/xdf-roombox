@@ -11,6 +11,7 @@
     <div class="brand">新东方云教室 <span class="sub">配套服务</span></div>
     <nav>
       <button class="tab active" data-tab="calendar">日历</button>
+      <button class="tab" data-tab="classes">课程</button>
       <button class="tab" data-tab="playbacks">回放</button>
       <button class="tab" data-tab="settings">设置</button>
     </nav>
@@ -22,10 +23,31 @@
       <div id="calendar"></div>
     </section>
 
+    <section id="tab-classes" class="tabpane">
+      <div class="classes-layout">
+        <aside class="class-list" id="class-list"></aside>
+        <div class="class-detail">
+          <div class="toolbar">
+            <h2 id="class-title">选择左侧课程</h2>
+            <span class="hint" id="class-hint"></span>
+          </div>
+          <table class="table" id="class-table">
+            <thead><tr>
+              <th>日期</th><th>时间</th><th>讲次</th><th>主讲</th><th>回放</th><th>操作</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section id="tab-playbacks" class="tabpane">
       <div class="toolbar">
         <h2>课程回放</h2>
         <button class="btn sm" onclick="loadPlaybacks()">刷新</button>
+        <label class="hint" style="display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="pb-direct" style="width:auto"> 下载用 CDN 直连（不占服务器流量）
+        </label>
         <span class="hint" id="pb-hint"></span>
       </div>
       <table class="table" id="pb-table">

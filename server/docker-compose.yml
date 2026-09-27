@@ -8,6 +8,7 @@ services:
       - ADMIN_PASS=change-me          # 必填: 访问本服务的密码
       # - PORT=8080                   # 可选
       # - DATA_DIR=/data              # 可选
+      # - SYNC_FROM=2024-01-01        # 可选: 历史扫描起点(更早的课从此日期起拉取)
     volumes:
       - ./data:/data                  # SQLite 数据持久化
     restart: unless-stopped

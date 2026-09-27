@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -40,15 +42,17 @@ func ParseJWT(token string) (*JWTInfo, error) {
 
 // ---- schedule API ----
 type rbxLesson struct {
-	LessonID      string `json:"lesson_id"`
-	ClassroomName string `json:"classroom_name"`
-	StartTime     string `json:"start_time"`
-	EndTime       string `json:"end_time"`
-	MainID        any    `json:"mainId"`
-	ClassID       any    `json:"class_id"`
-	RoomCode      string `json:"room_code"`
-	Record        int    `json:"record"`
-	Teacher       struct {
+	LessonID       string `json:"lesson_id"`
+	ClassroomName  string `json:"classroom_name"`
+	StartTime      string `json:"start_time"`
+	EndTime        string `json:"end_time"`
+	MainID         any    `json:"mainId"`
+	ClassID        any    `json:"class_id"`
+	ClassCode      string `json:"class_code"`
+	RoomCode       string `json:"room_code"`
+	Record         int    `json:"record"`
+	StudyReportURL string `json:"studyReportUrl"`
+	Teacher        struct {
 		TeacherName string `json:"teacherName"`
 	} `json:"teacher"`
 	Playback struct {
@@ -63,7 +67,17 @@ func (l *rbxLesson) MainIDStr() string {
 	case string:
 		return v
 	case float64:
-		return fmt.Sprintf("%.0f", v)
+		return strconv.FormatInt(int64(v), 10)
+	}
+	return ""
+}
+
+func (l *rbxLesson) ClassIDStr() string {
+	switch v := l.ClassID.(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
 	}
 	return ""
 }
@@ -81,11 +95,13 @@ func (l *rbxLesson) ToRow() *LessonRow {
 		EndTime:        et,
 		ClassroomName:  l.ClassroomName,
 		Teacher:        l.Teacher.TeacherName,
-		ClassID:        fmt.Sprintf("%v", l.ClassID),
+		ClassID:        l.ClassIDStr(),
+		ClassCode:      l.ClassCode,
 		MainID:         l.MainIDStr(),
 		RoomCode:       l.RoomCode,
 		Record:         l.Record,
 		PlaybackStatus: l.Playback.Status,
+		ReportURL:      l.StudyReportURL,
 	}
 	if len(l.Playback.URLs) > 0 {
 		row.PlaybackURL = l.Playback.URLs[0]
@@ -99,7 +115,7 @@ func (l *rbxLesson) ToRow() *LessonRow {
 	return row
 }
 
-// FetchSchedule 按时间窗拉课表 (兼容入口, 主同步走 FetchClasses+FetchClassLessons)
+// FetchSchedule 按时间窗拉课表 (全量历史扫描的基础)
 func FetchSchedule(token, uid string, fromSec, toSec int64) ([]*LessonRow, error) {
 	u := fmt.Sprintf("%s/api/schedule/my?userId=%s&queryType=1&startDate=%d&endDate=%d&token=%s",
 		apiBase, url.QueryEscape(uid), fromSec, toSec, url.QueryEscape(token))
@@ -123,7 +139,7 @@ func FetchSchedule(token, uid string, fromSec, toSec int64) ([]*LessonRow, error
 	return out, nil
 }
 
-// ---- 全量课程/讲次 (我的课程页数据源) ----
+// ---- 课程/讲次 ----
 type rbxClass struct {
 	ClassID     any    `json:"classId"`
 	ClassName   string `json:"className"`
@@ -142,12 +158,12 @@ func (c *rbxClass) ClassIDStr() string {
 	case string:
 		return v
 	case float64:
-		return fmt.Sprintf("%.0f", v)
+		return strconv.FormatInt(int64(v), 10)
 	}
 	return ""
 }
 
-// FetchClasses 返回全部课程 (pageSize 2000, 不分页)
+// FetchClasses 返回"我的课程"列表 (仅当前有效班级, pageSize 2000)
 func FetchClasses(token string) ([]rbxClass, error) {
 	u := fmt.Sprintf("%s/api/schedule/my-classes?pageSize=2000&version=2.74.3.2063&token=%s",
 		apiBase, url.QueryEscape(token))
@@ -167,7 +183,7 @@ func FetchClasses(token string) ([]rbxClass, error) {
 	return r.Data.List, nil
 }
 
-// FetchClassLessons 返回某课程的全部讲次 (含历史与未来, 回放直链每次重新签发)
+// FetchClassLessons 返回某班级的全部讲次 (含历史与未来; 回放直链每次重新签发)
 func FetchClassLessons(token, classID string) ([]*LessonRow, error) {
 	u := fmt.Sprintf("%s/api/schedule/class/lessons?classId=%s&version=2.74.3.2063&token=%s",
 		apiBase, url.QueryEscape(classID), url.QueryEscape(token))
@@ -220,7 +236,34 @@ func authKeyExpire(uri string) int64 {
 	return 0
 }
 
-// ---- 同步 (全量: 我的课程 -> 每班全部讲次) ----
+// ---- 班级名推导 ----
+var lessonNoRe = regexp.MustCompile(`第[0-9]+([\-—~、][0-9]+)*讲.*$`)
+
+// deriveClassName 从讲次名推导班级名: "XX课第3讲" -> "XX课"
+func deriveClassName(lessonName string) string {
+	s := strings.TrimSpace(lessonNoRe.ReplaceAllString(lessonName, ""))
+	if s == "" {
+		return lessonName
+	}
+	return s
+}
+
+// syncFromTime 全量扫描起点 (SYNC_FROM 环境变量, 默认 2024-01-01)
+func syncFromTime() time.Time {
+	def := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+	s := strings.TrimSpace(os.Getenv("SYNC_FROM"))
+	if s == "" {
+		return def
+	}
+	t, err := time.ParseInLocation("2006-01-02", s, time.Local)
+	if err != nil {
+		log.Printf("[sync] SYNC_FROM=%q 解析失败, 使用默认 %s", s, def.Format("2006-01-02"))
+		return def
+	}
+	return t
+}
+
+// ---- 同步 (全量: 元数据 + 全历史窗口扫描 + 现有班级讲次) ----
 func (a *App) Sync() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -238,29 +281,73 @@ func (a *App) Sync() {
 		a.db.SetSetting("last_sync_err", "token 已过期, 请到设置页更新")
 		return
 	}
+
+	// 1) 当前课程元数据 (权威班级名/编码)
 	classes, err := FetchClasses(token)
 	if err != nil {
-		a.db.SetSetting("last_sync_err", "my-classes: "+err.Error())
-		log.Println("[sync] ", err)
-		return
+		log.Println("[sync] my-classes:", err)
 	}
-	total, ok := 0, 0
+	for _, c := range classes {
+		a.db.UpsertClass(c.ClassIDStr(), c.ClassName, c.ClassCode, c.Teacher.TeacherName, "my-classes")
+	}
+
+	// 2) 全历史窗口扫描 (按年分片): 发现全部班级(含已从课程列表消失的历史班)并刷新回放直链
+	from := syncFromTime()
+	to := time.Now().AddDate(0, 0, 180)
+	total, okChunks, chunks := 0, 0, 0
+	earliest := map[string]*LessonRow{}
+	for start := from; start.Before(to); {
+		end := start.AddDate(0, 0, 365)
+		if end.After(to) {
+			end = to
+		}
+		chunks++
+		rows, err := FetchSchedule(token, info.Sub, start.Unix(), end.Unix())
+		if err != nil {
+			log.Printf("[sync] 窗口 %s~%s: %v", start.Format("2006-01-02"), end.Format("2006-01-02"), err)
+		} else {
+			okChunks++
+			for _, r := range rows {
+				if err := a.db.UpsertLesson(r); err == nil {
+					total++
+				}
+				if r.ClassID != "" {
+					if cur, ok := earliest[r.ClassID]; !ok || r.StartTime < cur.StartTime {
+						earliest[r.ClassID] = r
+					}
+				}
+			}
+		}
+		start = end
+	}
+
+	// 3) 派生班级元数据 (仅填补无名班级, 不覆盖 my-classes 权威名)
+	for cid, r := range earliest {
+		a.db.UpsertClass(cid, deriveClassName(r.ClassroomName), r.ClassCode, r.Teacher, "derived")
+	}
+
+	// 4) 现有班级全部讲次 (含远期排课与学习报告链接等富字段)
+	full := 0
 	for _, c := range classes {
 		rows, err := FetchClassLessons(token, c.ClassIDStr())
 		if err != nil {
 			log.Println("[sync] class/lessons", c.ClassIDStr(), err)
 			continue
 		}
-		ok++
 		for _, r := range rows {
 			if err := a.db.UpsertLesson(r); err == nil {
-				total++
+				full++
 			}
 		}
 	}
+
+	if okChunks == 0 {
+		a.db.SetSetting("last_sync_err", fmt.Sprintf("课表接口失败 (0/%d 窗口成功)", chunks))
+		return
+	}
 	a.db.SetSetting("last_sync", fmt.Sprintf("%d", time.Now().Unix()))
 	a.db.SetSetting("last_sync_err", "")
-	log.Printf("[sync] 全量同步完成: %d/%d 个课程, %d 条讲次记录", ok, len(classes), total)
+	log.Printf("[sync] 完成: 窗口 %d/%d, 扫描 %d 讲次, 班级 %d 个, 现有班讲次 %d", okChunks, chunks, total, len(earliest), full)
 }
 
 // ---- 上课提醒 ----

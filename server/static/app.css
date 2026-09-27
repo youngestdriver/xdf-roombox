@@ -52,3 +52,18 @@ main { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
 .modal-body { padding: 16px 20px; }
 .kv { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
 .kv span { color: #6b7280; }
+
+/* ---- 课程分类视图 ---- */
+.classes-layout { display: flex; gap: 16px; align-items: flex-start; }
+.class-list { flex: 0 0 300px; max-height: 75vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.class-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.class-item:hover { border-color: #b9d3ff; }
+.class-item.active { border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,.15); }
+.ci-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.ci-name { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.ci-sub { font-size: 12px; color: #6b7280; margin-top: 5px; }
+.class-detail { flex: 1; min-width: 0; }
+@media (max-width: 900px) {
+  .classes-layout { flex-direction: column; }
+  .class-list { flex: none; width: 100%; max-height: none; }
+}
