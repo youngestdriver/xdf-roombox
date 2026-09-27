@@ -16,6 +16,8 @@ public class ClassWatcher
     private readonly Dictionary<string, string> _entered = new();
     private readonly HashSet<string> _exited = new();
     private readonly HashSet<string> _evaluated = new();
+    private readonly Dictionary<string, int> _pageReloads = new();   // lessonId -> 强制刷新次数
+    private DateTime _lastReloadUtc = DateTime.MinValue;
     private readonly string _statePath;
 
     public RuntimeState State { get; } = new();
@@ -203,7 +205,8 @@ public class ClassWatcher
         var expr = "(()=>{const name=" + nameJson + ",hm='" + hhmm + "';" +
             "const all=[...document.querySelectorAll('button')].filter(b=>(b.textContent||'').includes('进入教室'));" +
             "const bs=all.filter(b=>!((b.className||'').toString().includes('disabled')));" +
-            "if(!bs.length)return 'NOBUTTON all='+all.length;" +
+            "const diag=' all='+all.length+' clickable='+bs.length+' vis='+document.visibilityState+' ready='+document.readyState;" +
+            "if(!bs.length)return 'NOBUTTON'+diag;" +
             "let hit=null;if(bs.length===1){hit=bs[0];}" +
             "else{hit=bs.find(b=>{let el=b;for(let i=0;i<6&&el;i++){el=el.parentElement;" +
             "if(el&&(el.innerText||'').includes(hm)&&(el.innerText||'').includes(name))return true;}return false;});}" +
@@ -226,6 +229,39 @@ public class ClassWatcher
             }
             else _log("WARN", "  验证: 未见课堂窗口，下轮重试");
         }
+        else if (r != null && r.StartsWith("NOBUTTON"))
+        {
+            await RecoverStaleSchedulePageAsync(lesson, schedPage, r, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        }
+    }
+
+    /// <summary>
+    /// 课表页「按钮消失 / 状态停滞」时自愈：强制刷新页面，让 SPA 重新拉数据重渲染。
+    /// 实测(2026-09-27 08:15~08:31 连续 NOBUTTON all=0)：页面随云教室启动加载时若首屏请求
+    /// 赶上登录过程，会渲染成空列表且此后不再自动重试；刷新一次即恢复正常。
+    /// </summary>
+    private async Task RecoverStaleSchedulePageAsync(Lesson lesson, CdpTarget page, string result, long nowSec)
+    {
+        // 两种异常: all=0 按钮整片不存在; 或课程早已开始按钮却仍全是 disabled(页面状态停在过去)
+        var blank = result.StartsWith("NOBUTTON all=0");
+        var staleDisabled = !blank && nowSec > lesson.StartTime + 120;
+        if (!blank && !staleDisabled) return;   // 正常的「课前未放行」, 等 SPA 自己开
+
+        var n = _pageReloads.GetValueOrDefault(lesson.LessonId);
+        if (n >= 3)
+        {
+            if (n == 3)
+            {
+                _pageReloads[lesson.LessonId] = 4;
+                _log("ERROR", "  课表页已刷新 3 次仍无可用按钮，请手动检查课表窗口");
+            }
+            return;
+        }
+        if (DateTime.UtcNow - _lastReloadUtc < TimeSpan.FromSeconds(60)) return;
+        _lastReloadUtc = DateTime.UtcNow;
+        _pageReloads[lesson.LessonId] = n + 1;
+        _log("WARN", $"  课表页状态异常（{(blank ? "按钮不存在" : "状态未更新")}），强制刷新页面（第 {n + 1}/3 次）");
+        await _cdp.EvaluateAsync(page.WebSocketDebuggerUrl, "location.reload();'RELOADING'");
     }
 
     private async Task SignInAsync(CdpTarget classroom)
