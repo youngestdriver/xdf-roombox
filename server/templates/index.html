@@ -87,7 +87,7 @@
         <h2>下载方式</h2>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#4b5563">
           <input type="checkbox" id="s-direct" style="width:auto">
-          下载用 CDN 直连（浏览器直接从 CDN 拉取，不占服务器流量；受 CDN 跨域限制时自动回退代理下载）
+          下载用 CDN 直连（浏览器直接从 CDN 拉取，不占服务器流量；浏览器无法保存时直接打开 CDN 链接，不回退服务器代理）
         </label>
         <div class="row">
           <input type="text" id="s-dltpl" placeholder="{date}_{time}_{mainid}">
