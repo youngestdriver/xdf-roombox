@@ -28,11 +28,12 @@ document.querySelectorAll('.tab').forEach((btn) => {
   });
 });
 
-/* ---------- 下载链接(代理/直连) ---------- */
+/* ---------- 下载链接(代理/直连, 由设置页开关控制) ---------- */
+let downloadDirect = false;
+
 function dlLink(lessonId, label) {
-  const direct = document.getElementById('pb-direct')?.checked;
-  const href = `/api/playback/${lessonId}/dl` + (direct ? '?mode=direct' : '');
-  const title = direct ? 'CDN 直连下载(不占服务器流量)' : '服务器代理下载(文件名规范, 支持断点续传)';
+  const href = `/api/playback/${lessonId}/dl` + (downloadDirect ? '?mode=direct' : '');
+  const title = downloadDirect ? 'CDN 直连下载(不占服务器流量)' : '服务器代理下载(文件名规范, 支持断点续传)';
   return `<a class="btn sm" href="${href}" title="${title}">${label}</a>`;
 }
 
@@ -52,6 +53,9 @@ async function loadStatus() {
     if (!s.last_sync_err) bits.push(`课表 ${s.lesson_count} · 回放 ${s.playback_count}`);
     document.getElementById('statusbar').textContent = bits.join(' · ');
     document.getElementById('s-token-hint').textContent = s.token_mask || '';
+    downloadDirect = !!s.download_direct;
+    const ck = document.getElementById('s-direct');
+    if (ck) ck.checked = downloadDirect;
   } catch (e) { /* 忽略 */ }
 }
 
@@ -198,6 +202,7 @@ async function saveSettings() {
     webhook_url: document.getElementById('s-whook').value,
     webhook_type: document.getElementById('s-wtype').value,
     notify_minutes: parseInt(document.getElementById('s-nmin').value || '5', 10),
+    download_direct: document.getElementById('s-direct').checked,
   };
   try {
     await api('/api/settings', { method: 'POST', body: JSON.stringify(body) });

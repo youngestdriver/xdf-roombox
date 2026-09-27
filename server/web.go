@@ -103,21 +103,23 @@ func (a *App) apiStatus(w http.ResponseWriter) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{
-		"token_mask":    mask,
-		"token_exp":     expLeft, // 剩余秒, -1=未知/未配置
-		"last_sync":     lastSync,
-		"last_sync_err": a.db.GetSetting("last_sync_err"),
-		"lesson_count":  lessons,
-		"playback_count": playbacks,
+		"token_mask":      mask,
+		"token_exp":       expLeft, // 剩余秒, -1=未知/未配置
+		"last_sync":       lastSync,
+		"last_sync_err":   a.db.GetSetting("last_sync_err"),
+		"lesson_count":    lessons,
+		"playback_count":  playbacks,
+		"download_direct": a.db.GetSetting("download_direct") == "1",
 	})
 }
 
 func (a *App) apiSaveSettings(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Token         string `json:"token"`
-		WebhookURL    string `json:"webhook_url"`
-		WebhookType   string `json:"webhook_type"`
-		NotifyMinutes int    `json:"notify_minutes"`
+		Token          string `json:"token"`
+		WebhookURL     string `json:"webhook_url"`
+		WebhookType    string `json:"webhook_type"`
+		NotifyMinutes  int    `json:"notify_minutes"`
+		DownloadDirect *bool  `json:"download_direct"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSON(w, 400, map[string]string{"err": "参数解析失败"})
@@ -129,6 +131,13 @@ func (a *App) apiSaveSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.db.SetSetting("token", strings.TrimSpace(in.Token))
+	}
+	if in.DownloadDirect != nil {
+		v := "0"
+		if *in.DownloadDirect {
+			v = "1"
+		}
+		a.db.SetSetting("download_direct", v)
 	}
 	if in.WebhookURL != "" {
 		a.db.SetSetting("webhook_url", strings.TrimSpace(in.WebhookURL))
