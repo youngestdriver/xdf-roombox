@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -73,6 +75,8 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 		a.apiClasses(w)
 	case r.Method == "GET" && len(seg) == 3 && seg[0] == "classes" && seg[2] == "lessons":
 		a.apiClassLessons(w, seg[1])
+	case r.Method == "GET" && len(seg) == 3 && seg[0] == "playback" && seg[2] == "link":
+		a.apiPlaybackLink(w, seg[1])
 	case (r.Method == "GET" || r.Method == "HEAD") && len(seg) == 3 && seg[0] == "playback" && seg[2] == "media":
 		a.apiPlaybackRedirect(w, r, seg[1])
 	case (r.Method == "GET" || r.Method == "HEAD") && len(seg) == 3 && seg[0] == "playback" && seg[2] == "dl":
@@ -103,23 +107,25 @@ func (a *App) apiStatus(w http.ResponseWriter) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{
-		"token_mask":      mask,
-		"token_exp":       expLeft, // 剩余秒, -1=未知/未配置
-		"last_sync":       lastSync,
-		"last_sync_err":   a.db.GetSetting("last_sync_err"),
-		"lesson_count":    lessons,
-		"playback_count":  playbacks,
-		"download_direct": a.db.GetSetting("download_direct") == "1",
+		"token_mask":       mask,
+		"token_exp":        expLeft, // 剩余秒, -1=未知/未配置
+		"last_sync":        lastSync,
+		"last_sync_err":    a.db.GetSetting("last_sync_err"),
+		"lesson_count":     lessons,
+		"playback_count":   playbacks,
+		"download_direct":  a.db.GetSetting("download_direct") == "1",
+		"dl_name_template": a.db.GetSetting("dl_name_template"),
 	})
 }
 
 func (a *App) apiSaveSettings(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Token          string `json:"token"`
-		WebhookURL     string `json:"webhook_url"`
-		WebhookType    string `json:"webhook_type"`
-		NotifyMinutes  int    `json:"notify_minutes"`
-		DownloadDirect *bool  `json:"download_direct"`
+		Token          string  `json:"token"`
+		WebhookURL     string  `json:"webhook_url"`
+		WebhookType    string  `json:"webhook_type"`
+		NotifyMinutes  int     `json:"notify_minutes"`
+		DownloadDirect *bool   `json:"download_direct"`
+		DlNameTemplate *string `json:"dl_name_template"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSON(w, 400, map[string]string{"err": "参数解析失败"})
@@ -138,6 +144,13 @@ func (a *App) apiSaveSettings(w http.ResponseWriter, r *http.Request) {
 			v = "1"
 		}
 		a.db.SetSetting("download_direct", v)
+	}
+	if in.DlNameTemplate != nil {
+		t := strings.TrimSpace(*in.DlNameTemplate)
+		if r := []rune(t); len(r) > 200 {
+			t = string(r[:200])
+		}
+		a.db.SetSetting("dl_name_template", t)
 	}
 	if in.WebhookURL != "" {
 		a.db.SetSetting("webhook_url", strings.TrimSpace(in.WebhookURL))
@@ -201,16 +214,17 @@ func (a *App) apiPlaybacks(w http.ResponseWriter) {
 	for _, l := range rows {
 		expired := l.AuthExp > 0 && now > l.AuthExp
 		out = append(out, map[string]any{
-			"lesson_id":   l.LessonID,
-			"start":       l.StartTime,
-			"title":       l.ClassroomName,
-			"teacher":     l.Teacher,
-			"main_id":     l.MainID,
-			"status":      l.PlaybackStatus, // 0=未生成 1=已生成
-			"has_url":     l.PlaybackURL != "",
-			"expired":     expired,
-			"auth_exp":    l.AuthExp,
-			"media_id":    l.MediaID,
+			"lesson_id": l.LessonID,
+			"start":     l.StartTime,
+			"end":       l.EndTime,
+			"title":     l.ClassroomName,
+			"teacher":   l.Teacher,
+			"main_id":   l.MainID,
+			"status":    l.PlaybackStatus, // 0=未生成 1=已生成
+			"has_url":   l.PlaybackURL != "",
+			"expired":   expired,
+			"auth_exp":  l.AuthExp,
+			"media_id":  l.MediaID,
 		})
 	}
 	writeJSON(w, 200, out)
@@ -247,6 +261,71 @@ func (a *App) apiPlaybackDownload(w http.ResponseWriter, r *http.Request, id str
 	a.apiPlaybackProxy(w, r, l)
 }
 
+// apiPlaybackLink 返回 CDN 直链 + 按模板渲染的文件名 (供前端浏览器直连下载用)
+func (a *App) apiPlaybackLink(w http.ResponseWriter, id string) {
+	l, err := a.db.GetLesson(id)
+	if err != nil || l.PlaybackURL == "" {
+		writeJSON(w, 404, map[string]string{"err": "回放不存在或未生成"})
+		return
+	}
+	if l.AuthExp > 0 && time.Now().Unix() > l.AuthExp {
+		writeJSON(w, 410, map[string]string{"err": "回放签名已过期, 等待同步刷新后重试"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"url": l.PlaybackURL, "name": a.renderFileName(l)})
+}
+
+// ---- 下载文件名模板 ----
+var illegalNameChars = regexp.MustCompile(`[\\/:*?"<>|\x00-\x1f]+`)
+
+func sanitizeFileName(s string) string {
+	s = illegalNameChars.ReplaceAllString(s, "_")
+	s = strings.Trim(s, " ._")
+	if r := []rune(s); len(r) > 150 {
+		s = string(r[:150])
+	}
+	if s == "" {
+		s = "recording"
+	}
+	return s
+}
+
+// renderFileName 用 dl_name_template 设置渲染文件名
+// 占位符: {date} {time} {title} {teacher} {mainid}
+func (a *App) renderFileName(l *LessonRow) string {
+	tpl := strings.TrimSpace(a.db.GetSetting("dl_name_template"))
+	if tpl == "" {
+		tpl = "{date}_{time}_{mainid}"
+	}
+	t := at8(l.StartTime)
+	r := strings.NewReplacer(
+		"{date}", t.Format("20060102"),
+		"{time}", t.Format("1504"),
+		"{title}", l.ClassroomName,
+		"{teacher}", l.Teacher,
+		"{mainid}", l.MainID,
+	)
+	name := sanitizeFileName(r.Replace(tpl))
+	if !strings.HasSuffix(strings.ToLower(name), ".mp4") {
+		name += ".mp4"
+	}
+	return name
+}
+
+// contentDisposition 生成兼容各浏览器的下载头 (RFC 5987 编码非 ASCII 文件名)
+func contentDisposition(name string) string {
+	var ascii strings.Builder
+	for _, c := range name {
+		if c < 128 {
+			ascii.WriteRune(c)
+		} else {
+			ascii.WriteRune('_')
+		}
+	}
+	utf8 := strings.ReplaceAll(url.QueryEscape(name), "+", "%20")
+	return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, ascii.String(), utf8)
+}
+
 // apiPlaybackProxy 流式代理下载 (支持 Range/断点)
 func (a *App) apiPlaybackProxy(w http.ResponseWriter, r *http.Request, l *LessonRow) {
 	req, err := http.NewRequest("GET", l.PlaybackURL, nil)
@@ -273,8 +352,7 @@ func (a *App) apiPlaybackProxy(w http.ResponseWriter, r *http.Request, l *Lesson
 	if ar := resp.Header.Get("Accept-Ranges"); ar != "" {
 		h.Set("Accept-Ranges", ar)
 	}
-	name := fmt.Sprintf("%s_%s.mp4", at8(l.StartTime).Format("20060102_1504"), l.MainID)
-	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
+	h.Set("Content-Disposition", contentDisposition(a.renderFileName(l)))
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Println("[proxy] 传输中断: ", err)

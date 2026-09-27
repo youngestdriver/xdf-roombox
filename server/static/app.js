@@ -28,13 +28,89 @@ document.querySelectorAll('.tab').forEach((btn) => {
   });
 });
 
-/* ---------- 下载链接(代理/直连, 由设置页开关控制) ---------- */
+/* ---------- 下载(代理/直连, 由设置页开关控制) ---------- */
 let downloadDirect = false;
 
 function dlLink(lessonId, label) {
-  const href = `/api/playback/${lessonId}/dl` + (downloadDirect ? '?mode=direct' : '');
-  const title = downloadDirect ? 'CDN 直连下载(不占服务器流量)' : '服务器代理下载(文件名规范, 支持断点续传)';
-  return `<a class="btn sm" href="${href}" title="${title}">${label}</a>`;
+  if (downloadDirect) {
+    return `<a class="btn sm" href="javascript:void(0)" onclick="downloadDirectCDN('${lessonId}', this)" title="CDN 直连下载(浏览器直接拉取, 不占服务器流量; 受跨域限制时自动回退代理下载)">${label}</a>`;
+  }
+  return `<a class="btn sm" href="/api/playback/${lessonId}/dl" title="服务器代理下载(文件名按模板, 支持断点续传)">${label}</a>`;
+}
+
+// CDN 直连下载: 浏览器 fetch 流式拉取 CDN, 本地保存为模板文件名
+// 1) File System Access API(Chromium): 流式写盘, 带进度
+// 2) 回退: fetch → Blob → a[download](超大文件改走代理, 避免爆内存)
+// 3) 任何失败(含 CDN 跨域白名单拦截): 回退服务器代理下载
+const CDN_BLOCK_KEY = 'xdf_cdn_direct_blocked'; // 直连失败记忆(仅当前标签页会话), 避免反复浪费请求
+
+async function downloadDirectCDN(lessonId, el) {
+  const orig = el.textContent;
+  const fmtSize = (n) => n > 1048576 ? (n / 1048576).toFixed(0) + 'MB' : (n / 1024).toFixed(0) + 'KB';
+  const useProxy = () => {
+    const a = document.createElement('a');
+    a.href = `/api/playback/${lessonId}/dl`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    el.textContent = '已回退代理下载';
+    setTimeout(() => { el.textContent = orig; }, 3000);
+  };
+  if (sessionStorage.getItem(CDN_BLOCK_KEY)) { useProxy(); return; }
+  try {
+    el.textContent = '连接 CDN…';
+    const info = await api(`/api/playback/${lessonId}/link`);
+    const resp = await fetch(info.url); // 跨域白名单拦截时在此抛 TypeError
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    sessionStorage.removeItem(CDN_BLOCK_KEY);
+    const total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+
+    if (window.showSaveFilePicker) {
+      let handle;
+      try {
+        handle = await window.showSaveFilePicker({ suggestedName: info.name });
+      } catch (e) {
+        if (resp.body) await resp.body.cancel();
+        if (e.name === 'AbortError') { el.textContent = orig; return; } // 用户取消保存
+        throw e;
+      }
+      const writable = await handle.createWritable();
+      const reader = resp.body.getReader();
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writable.write(value);
+        received += value.length;
+        el.textContent = total ? `下载 ${Math.round(received / total * 100)}%` : `下载 ${fmtSize(received)}`;
+      }
+      await writable.close();
+    } else if (total > 1610612736) {
+      if (resp.body) await resp.body.cancel();
+      useProxy(); return; // >1.5GB 且无流式保存能力, 避免 Blob 爆内存
+    } else {
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = info.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+    el.textContent = '✓ 完成';
+    setTimeout(() => { el.textContent = orig; }, 3000);
+  } catch (e) {
+    if (String(e).includes('HTTP 410')) {
+      el.textContent = '签名已过期, 稍后重试';
+      setTimeout(() => { el.textContent = orig; }, 3000);
+      return;
+    }
+    if (e instanceof TypeError) sessionStorage.setItem(CDN_BLOCK_KEY, '1'); // 跨域/网络层失败, 本会话不再重试
+    console.warn('CDN 直连失败(跨域白名单限制等), 回退代理下载:', e);
+    useProxy();
+  }
 }
 
 /* ---------- 状态栏 ---------- */
@@ -56,6 +132,8 @@ async function loadStatus() {
     downloadDirect = !!s.download_direct;
     const ck = document.getElementById('s-direct');
     if (ck) ck.checked = downloadDirect;
+    const tpl = document.getElementById('s-dltpl');
+    if (tpl && !tpl.value) tpl.value = s.dl_name_template || '';
   } catch (e) { /* 忽略 */ }
 }
 
@@ -203,6 +281,7 @@ async function saveSettings() {
     webhook_type: document.getElementById('s-wtype').value,
     notify_minutes: parseInt(document.getElementById('s-nmin').value || '5', 10),
     download_direct: document.getElementById('s-direct').checked,
+    dl_name_template: document.getElementById('s-dltpl').value,
   };
   try {
     await api('/api/settings', { method: 'POST', body: JSON.stringify(body) });

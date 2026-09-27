@@ -87,11 +87,13 @@
         <h2>下载方式</h2>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#4b5563">
           <input type="checkbox" id="s-direct" style="width:auto">
-          下载用 CDN 直连（302 跳转，不占服务器流量；关闭则走服务器代理，文件名规范、支持断点续传）
+          下载用 CDN 直连（浏览器直接从 CDN 拉取，不占服务器流量；受 CDN 跨域限制时自动回退代理下载）
         </label>
         <div class="row">
+          <input type="text" id="s-dltpl" placeholder="{date}_{time}_{mainid}">
           <button class="btn" onclick="saveSettings()">保存</button>
         </div>
+        <div class="hint">文件名模板，占位符：{date} 日期 · {time} 时间 · {title} 讲次名 · {teacher} 主讲 · {mainid} 课堂号；留空为默认 {date}_{time}_{mainid}</div>
       </div>
       <div class="panel">
         <h2>数据同步</h2>
