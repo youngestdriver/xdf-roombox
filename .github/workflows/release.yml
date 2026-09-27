@@ -1,0 +1,57 @@
+name: Release (Windows)
+
+# 推 v* tag 自动发版；也可在 Actions 页手动指定 tag
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '发布 tag（如 v1.0.1；不存在时会创建在当前提交上）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 解析版本
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}"
+          if ($tag -notlike 'v*') { $tag = "v$tag" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
+
+      - name: 构建 Windows 单文件
+        shell: pwsh
+        run: |
+          dotnet publish app/XdfRoombox.csproj -c Release -r win-x64 `
+            -p:PublishSingleFile=true --self-contained false `
+            -p:Version=${{ steps.ver.outputs.version }} -o out
+
+      - name: 生成校验和
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash out/XdfRoombox.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  XdfRoombox.exe" | Set-Content -Encoding utf8 out/SHA256SUMS.txt
+
+      - name: 发布 Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" `
+            out/XdfRoombox.exe out/SHA256SUMS.txt `
+            --title "${{ steps.ver.outputs.tag }}" `
+            --target "$env:GITHUB_SHA" `
+            --notes "新东方云教室助手 ${{ steps.ver.outputs.tag }} — Windows 单文件构建（框架依赖，需要 .NET 8 Desktop Runtime）。下载 XdfRoombox.exe 直接运行。"

@@ -9,8 +9,6 @@
 | 文件 | 说明 |
 |---|---|
 | `app/` | **云教室助手（.NET 8 WPF）**：上课全流程自动化，见下节 |
-| `class_watch.ps1` | PowerShell 版全天监听（助手的前身）：进教室 / 退出 / 评价 / 连堂 |
-| `auto_enter.ps1` | 更早的单功能脚本：课前自动点「进入教室」 |
 
 **接口逆向**
 
@@ -22,7 +20,6 @@
 | `extract_classroom_apis.ps1` | 课上接口抓取脚本（需在课堂中运行） |
 | `ws_capture.ps1` | WebSocket 信令捕获：`-Mode Now` 反查当前连接 / `-Mode Watch` 订阅 Network 事件流抓帧 |
 | `comment_page.html` / `evaluation_capture.json` | 课后评价页源码（含内联提交逻辑）与抓包快照 |
-| `watch_evaluation.ps1` / `submit_evaluation.ps1` | 评价窗口监听（只观察）/ 自动提交 |
 | `js/` `js_coursetable/` | 课表 webapp 前端 bundle（反编译参考） |
 | `js_wb/` `js_wbtools/` `js_sdk/` | 课堂主应用 / 互动工具(点名/签到/抢答) / IM+白板 SDK 的 bundle |
 
@@ -30,7 +27,7 @@
 
 | 文件 | 说明 |
 |---|---|
-| `server/` | **xdf-api 服务（Go 单体, Docker）**：课表日历 + 课程分类 + 回放（在线观看/下载）+ 上课提醒 Webhook，见 `server/README.md` |
+| `server/` | **xdf-api 服务（Go 单体, Docker）**：课表日历 + 课程分类 + 回放（在线观看/下载）+ 上课提醒 Webhook，详见 `server/README.md` |
 | `TEST_RECORDS.md` | 实战测试记录（首次自动进教室、课上接口抓取、WS 信令、评价提交等） |
 
 相关工具（不在本目录）：CDP 驱动脚本 `C:\Users\PaperCrane\xdf-cdp\cdp.ps1`，
@@ -62,9 +59,51 @@
 dotnet publish app/XdfRoombox.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o app/bin/Release/net8.0-windows/win-x64/publish
 ```
 
-运行 `app/bin/Release/net8.0-windows/win-x64/publish/XdfRoombox.exe`。注意**单实例保护**：重复启动会弹「已在运行中」提示，要重启请先关掉主窗口。
+运行 `app/bin/Release/net8.0-windows/win-x64/publish/XdfRoombox.exe`，或直接从 [Releases](https://github.com/youngestdriver/xdf-roombox/releases) 下载。注意**单实例保护**：重复启动会弹「已在运行中」提示，要重启请先关掉主窗口。
 
 排错：日志里 `NOBUTTON all=N clickable=N vis=… ready=…` 是进教室时的页面状态——`all=0` 页面空了（会自动刷新，刷新 3 次仍无效会报错提示人工检查），`all>0 clickable=0` 是课表页还没放行。
+
+## 部署 xdf-api（docker compose）
+
+```yaml
+# docker-compose.yml
+services:
+  xdf-api:
+    image: papercranewillfly/xdf-roombox:latest
+    container_name: xdf-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMIN_PASS=change-me      # 必填: 访问密码
+      # - SYNC_FROM=2024-01-01    # 可选: 历史扫描起点
+    volumes:
+      - ./data:/data              # SQLite 数据持久化
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d                            # 首次部署
+docker compose pull && docker compose up -d     # 升级到最新镜像
+```
+
+数据在 `./data/xdf-api.db`，备份这一个文件即可。要自己构建镜像（改了代码时）就用仓库里的 `server/docker-compose.yml`，它走 `build: .`。
+
+## 发布与镜像（GitHub Actions）
+
+| 工作流 | 触发 | 产物 |
+|---|---|---|
+| `.github/workflows/release.yml` | 推 `v*` tag，或在 Actions 页手动触发 | GitHub Release：Windows 单文件 `XdfRoombox.exe` + `SHA256SUMS.txt` |
+| `.github/workflows/docker.yml` | 推 main 且改动 `server/`，或手动触发 | Docker Hub `papercranewillfly/xdf-roombox`（`latest` + `sha-<短SHA>`） |
+
+发版（版本号会注入到 exe 里）：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+- Release 里是**框架依赖**单文件，运行需要 .NET 8 Desktop Runtime
+- Docker 推送需要先在仓库 Settings → Secrets and variables → Actions 里配置 `DOCKERHUB_TOKEN`（Docker Hub 的 Access Token）；没配时工作流会跳过推送并给 warning
 
 ## 认证
 
@@ -83,26 +122,6 @@ $start = ([DateTimeOffset]::Parse('2026-09-08T00:00:00+08:00')).ToUnixTimeSecond
 $end   = ([DateTimeOffset]::Parse('2026-09-15T00:00:00+08:00')).ToUnixTimeSeconds()
 Invoke-RestMethod "https://api.roombox.xdf.cn/api/schedule/my?userId=$uid&queryType=1&startDate=$start&endDate=$end&token=$token"
 ```
-
-## 旧脚本
-
-`auto_enter.ps1` —— 只做「课前自动进教室」：
-
-```powershell
-pwsh -File auto_enter.ps1 -Loop             # 常驻监控（每30秒查一次）
-pwsh -File auto_enter.ps1 -CheckNow -DryRun # 演练：只报告不点击
-pwsh -File auto_enter.ps1 -RestartIfNoDebug -Loop  # 应用已开但没带调试口时，自动重启带调试口
-```
-
-`class_watch.ps1` 是它的升级版（全天监听 + 退出 + 评价 + 连堂），功能已被 `app/` 的助手覆盖。
-
-开机自启（任务计划程序，登录时运行；把程序换成助手同理）：
-
-```
-schtasks /create /tn "xdf-auto-enter" /tr "pwsh -NoProfile -File C:\Users\PaperCrane\Desktop\code\xdf_roombox\auto_enter.ps1 -Loop" /sc onlogon
-```
-
-注意：默认要求云教室以 `--remote-debugging-port=9222` 启动，否则只有 `-RestartIfNoDebug` 模式会自动重启它。
 
 ## 盲区
 

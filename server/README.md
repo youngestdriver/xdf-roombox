@@ -16,8 +16,31 @@
 
 ## 快速开始（服务器上）
 
+**用现成镜像**（推荐）——把下面这份 `docker-compose.yml` 放到服务器上：
+
+```yaml
+services:
+  xdf-api:
+    image: papercranewillfly/xdf-roombox:latest
+    container_name: xdf-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMIN_PASS=change-me        # 改成你的密码
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+```
+
 ```bash
-cd xdf-api
+docker compose up -d                                # 部署
+docker compose pull && docker compose up -d         # 升级到最新镜像
+```
+
+**自己构建**（改了代码时）：把仓库里的 `server/docker-compose.yml`（走 `build: .`）拷到服务器：
+
+```bash
+cd server
 cp docker-compose.yml docker-compose.yml.bak   # 或直接编辑
 # 编辑 docker-compose.yml, 把 ADMIN_PASS 改成你的密码
 docker compose up -d --build
